@@ -740,6 +740,17 @@ function confirmTgAndDownload() {
 
 // --- Экспорт JSON ---
 function exportAndDownloadJSON() {
+  const workflow = buildWorkflowJSON();
+
+  // Скачиваем JSON локально (как и раньше)
+  downloadJSON(workflow, 'workflow_config.json');
+
+  // Отправляем на бэкенд
+  startBackendScan(workflow);
+}
+
+// Собираем итоговый массив узлов для бэкенда (без побочных эффектов)
+function buildWorkflowJSON() {
   const result = [];
 
   nodes.forEach(node => {
@@ -778,6 +789,34 @@ function exportAndDownloadJSON() {
     id: maxId + 1,
     parentid: [-1],
     type: "llmtype",
+    info: { type: isLocalLLM ? "local" : "cloud" }
+  });
+
+  return result;
+}
+
+function downloadJSON(data, filename) {
+  const jsonString = JSON.stringify(data, null, 2);
+  console.log("JSON для бэкенда:\n", jsonString);
+
+  const blob = new Blob([jsonString], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+  const isLocalLLM = document.getElementById('local-llm-checkbox').checked;
+  const maxId = nodes.length > 0 ? Math.max(...nodes.map(n => n.id)) : 0;
+
+  result.push({
+    id: maxId + 1,
+    parentid: [-1],
+    type: "llmtype",
     info: {
       type: isLocalLLM ? "local" : "cloud"
     }
@@ -795,6 +834,150 @@ function exportAndDownloadJSON() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+
+const BACKEND_URL = ''; // например: 'http://127.0.0.1:8000' — оставьте пустым, если проксируется
+
+let pollTimer = null;
+let currentSessionId = null;
+
+async function startBackendScan(workflow) {
+  // Сбрасываем предыдущий опрос, если он был
+  stopPolling();
+  currentSessionId = null;
+  showScanProgress('Отправка workflow на сервер...');
+
+  try {
+    const resp = await fetch(`${BACKEND_URL}/api/scan/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workflow })
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+      throw new Error(`HTTP ${resp.status} ${resp.statusText}${text ? ': ' + text : ''}`);
+    }
+
+    const data = await resp.json();
+    if (data.status !== 'Ok' || !data.session_id) {
+      throw new Error(data.text || 'Сервер не вернул session_id');
+    }
+
+    currentSessionId = data.session_id;
+    console.log('[scan] session_id =', currentSessionId, '—', data.text);
+
+    showScanProgress(data.text || 'Сканирование запущено...');
+    startPolling();
+  } catch (err) {
+    console.error('[scan] start error:', err);
+    showScanProgress(`Ошибка запуска: ${err.message}`, true);
+    showError(`Не удалось запустить сканирование: ${err.message}`);
+  }
+}
+
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(pollScanStatus, 1000);
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+async function pollScanStatus() {
+  if (!currentSessionId) return;
+
+  try {
+    const resp = await fetch(
+      `${BACKEND_URL}/api/scan/status?session_id=${encodeURIComponent(currentSessionId)}`
+    );
+
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+      throw new Error(`HTTP ${resp.status}${text ? ': ' + text : ''}`);
+    }
+
+    const data = await resp.json();
+    const status = data.status;
+    const text = data.text || '';
+
+    // Пишем статус в UI
+    showScanProgress(text);
+
+    if (status === 'Error') {
+      stopPolling();
+      showScanProgress(`Ошибка: ${text}`, true);
+      showError(text || 'Сканирование завершилось с ошибкой');
+      // Можно добавить кнопку "Очистить" или сохранить сессию
+      return;
+    }
+
+    if (status === 'End') {
+      stopPolling();
+
+      if (data.data) {
+        showScanProgress('Сканирование завершено. Сохраняю отчёт...', false);
+        downloadJSON(data.data, `scan_report_${currentSessionId}.json`);
+      } else {
+        showScanProgress('Сканирование завершено (без отчёта).', false);
+      }
+
+      // Очищаем сессию
+      currentSessionId = null;
+      return;
+    }
+
+    // status === 'Ok' — продолжаем опрос
+    // Если пришли данные с Ok (например, промежуточный message-узел),
+    // можем их куда-то сохранять, если нужно.
+    if (data.data) {
+      console.log('[scan] intermediate data:', data.data);
+    }
+  } catch (err) {
+    // Сетевые ошибки — не прерываем сессию, просто логируем и продолжаем
+    console.warn('[scan] poll error:', err);
+    // Если ошибка 404 — значит сессия потеряна, останавливаемся
+    if (err.message && err.message.includes('404')) {
+      stopPolling();
+      showScanProgress(`Сессия не найдена на сервере`, true);
+    }
+  }
+}
+
+// --- Простой прогресс-индикатор ---
+function showScanProgress(text, isError = false) {
+  let el = document.getElementById('scan-progress');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'scan-progress';
+    el.style.cssText = `
+      position: fixed; bottom: 16px; right: 16px;
+      background: #1e293b; color: #e2e8f0;
+      padding: 10px 16px; border-radius: 8px;
+      font-size: 13px; max-width: 420px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.3);
+      z-index: 10000; transition: opacity .2s;
+    `;
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+  el.style.background = isError ? '#7f1d1d' : '#1e293b';
+
+  if (!isError) {
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => {
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), 300);
+    }, 8000);
+    el.style.opacity = '1';
+  } else {
+    el.style.opacity = '1';
+  }
 }
 
 // --- Симуляция ---
