@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Security Workflow — конструктор</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="toast-error" id="toast-error"></div>
+
+<!-- Верхняя панель -->
+<header class="topbar">
+  <div class="header-left">
+    <button class="icon-btn" id="btn-toggle-left" onclick="toggleLeftSidebar()" title="Свернуть/развернуть панель нод">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+        <line x1="9" y1="3" x2="9" y2="21"></line>
+      </svg>
+    </button>
+
+    <div class="brand">
+      <div class="brand-logo">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          <path d="M9 12l2 2 4-4"></path>
+        </svg>
+      </div>
+      <div>
+        <h1>AI Security Workflow</h1>
+        <span class="subtitle">Визуальный конструктор проверок</span>
+      </div>
+    </div>
+
+    <span class="badge-counter" id="node-counter">Черновик · 1 нода</span>
+  </div>
+
+  <div class="header-right">
+    <!-- Кастомный тумблер LOCAL / CLOUD -->
+    <div class="llm-switch-group" title="Режим работы языковой модели">
+      <span class="llm-label">LLM:</span>
+      <label class="hardware-switch">
+        <input type="checkbox" id="local-llm-checkbox">
+        <span class="switch-track">
+          <span class="switch-text text-local">LOCAL</span>
+          <span class="switch-text text-cloud">CLOUD</span>
+          <span class="switch-thumb"></span>
+        </span>
+      </label>
+    </div>
+
+    <div class="toolbar-divider"></div>
+
+    <button class="btn-secondary" id="btn-undo" onclick="undo()" title="Отменить (Ctrl + Z)" disabled>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 7v6h6"></path>
+        <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path>
+      </svg>
+      <span>Отменить</span>
+    </button>
+
+    <button class="btn-secondary" id="btn-redo" onclick="redo()" title="Вернуть (Ctrl + Shift + Z)" disabled>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 7v6h-6"></path>
+        <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"></path>
+      </svg>
+      <span>Вернуть</span>
+    </button>
+
+    <button class="btn-secondary" onclick="clearCanvas()">Очистить</button>
+    <button class="btn-sim" onclick="runSimulation()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+      </svg>
+      <span>Симуляция</span>
+    </button>
+    <button class="btn-primary" onclick="handleVerifyClick()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+      <span>Проверить</span>
+    </button>
+  </div>
+</header>
+
+<!-- Основная рабочая область -->
+<div class="main">
+  <!-- Левая панель нод (сворачивается только по кнопке) -->
+  <aside class="sidebar-left" id="sidebar-left">
+    <div class="sidebar-inner">
+      <div class="palette-section">
+        <div class="category-title">Корневой узел (только 1)</div>
+        <div class="palette-item disabled-item" title="Корневой узел репозитория уже добавлен на холст (макс. 1)">
+          <div class="item-icon icon-amber">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          </div>
+          <div>
+            <strong>Репозиторий (Корневой)</strong>
+            <small>Уже на холсте (макс. 1)</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="palette-section">
+        <div class="category-title">Триггеры (обязательно)</div>
+        <div class="palette-item" draggable="true" data-type="triggers" data-subtype="onbutton" data-title="Ручной запуск">
+          <div class="item-icon icon-blue">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          </div>
+          <div>
+            <strong>Ручной запуск</strong>
+            <small>Запуск по кнопке</small>
+          </div>
+        </div>
+        <div class="palette-item" draggable="true" data-type="triggers" data-subtype="onschedual" data-title="Расписание">
+          <div class="item-icon icon-blue">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          </div>
+          <div>
+            <strong>Расписание</strong>
+            <small>Запуск по времени</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="palette-section">
+        <div class="category-title">Проверки безопасности (обязательно)</div>
+        <div class="palette-item" draggable="true" data-type="check" data-subtype="secrets" data-title="Поиск секретов">
+          <div class="item-icon icon-emerald">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>
+          </div>
+          <div>
+            <strong>Поиск секретов</strong>
+            <small>Ключи, пароли, токены</small>
+          </div>
+        </div>
+        <div class="palette-item" draggable="true" data-type="check" data-subtype="sca" data-title="Анализ зависимостей (SCA)">
+          <div class="item-icon icon-emerald">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
+          </div>
+          <div>
+            <strong>Анализ зависимостей (SCA)</strong>
+            <small>Уязвимые версии в Gradle</small>
+          </div>
+        </div>
+        <div class="palette-item" draggable="true" data-type="check" data-subtype="sast" data-title="Статический анализ (SAST)">
+          <div class="item-icon icon-emerald">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+          </div>
+          <div>
+            <strong>Статический анализ (SAST)</strong>
+            <small>Ошибки безопасности Kotlin</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="palette-section">
+        <div class="category-title">Логика и фильтры</div>
+        <div class="palette-item" draggable="true" data-type="logic" data-subtype="logic" data-title="Условие if / else">
+          <div class="item-icon icon-cyan">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>
+          </div>
+          <div>
+            <strong>Условие if / else</strong>
+            <small>Ветвление: Да / Нет</small>
+          </div>
+        </div>
+        <div class="palette-item" draggable="true" data-type="embedded_regex" data-subtype="regex" data-title="Регулярное выражение">
+          <div class="item-icon icon-purple">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3v10"></path><path d="M12.67 5.5l8.66 5"></path><path d="M12.67 10.5l8.66-5"></path><path d="M9 17a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2z"></path></svg>
+          </div>
+          <div>
+            <strong>Регулярное выражение</strong>
+            <small>Вложить в Репозиторий или проверку</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="palette-section">
+        <div class="category-title">Уведомления (обязательно)</div>
+        <div class="palette-item" draggable="true" data-type="message" data-subtype="telegram" data-title="Telegram">
+          <div class="item-icon icon-sky">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+          </div>
+          <div>
+            <strong>Telegram</strong>
+            <small>Отправить отчёт в чат</small>
+          </div>
+        </div>
+        <div class="palette-item" draggable="true" data-type="message" data-subtype="smtp" data-title="Электронная почта (SMTP)">
+          <div class="item-icon icon-sky">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+          </div>
+          <div>
+            <strong>Электронная почта (SMTP)</strong>
+            <small>Отправить письмо</small>
+          </div>
+        </div>
+        <div class="palette-item" draggable="true" data-type="message" data-subtype="webhook" data-title="HTTP Webhook">
+          <div class="item-icon icon-sky">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+          </div>
+          <div>
+            <strong>HTTP Webhook</strong>
+            <small>Передать отчёт по HTTP</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Центральный рабочий холст -->
+  <main class="canvas-wrapper" id="canvas">
+    <div id="viewport">
+      <svg id="connections"></svg>
+    </div>
+
+    <div class="zoom-badge" id="zoom-badge" onclick="resetZoom()" title="Нажмите, чтобы вернуть 100%">100%</div>
+
+    <!-- Микро-окошко пошаговой симуляции -->
+    <div class="sim-panel" id="sim-panel">
+      <div class="sim-header">
+        <span>⚡ Выполнение сценария</span>
+        <button onclick="document.getElementById('sim-panel').style.display='none'">✕</button>
+      </div>
+      <div class="sim-logs" id="sim-logs"></div>
+    </div>
+  </main>
+
+  <!-- Правая панель настроек (открывается по клику на ноду и анимированно переключается) -->
+  <aside class="sidebar-right collapsed" id="sidebar-right">
+    <div class="sidebar-right-inner">
+      <div class="sidebar-right-header">
+        <h3>Настройки ноды</h3>
+        <button class="icon-btn-sm" onclick="closeRightSidebar()" title="Закрыть панель">✕</button>
+      </div>
+      <div id="settings-panel" class="settings-empty">
+        Нажмите на любую ноду на холсте, чтобы настроить её параметры.
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- Модальное окно Telegram -->
+<div class="modal-backdrop" id="tg-modal">
+  <div class="modal-card">
+    <h3>Подключение Telegram-уведомлений</h3>
+    <p>Чтобы отчёты приходили в Telegram, найдите в поиске бота и запустите его (нажмите /start):</p>
+    <div class="bot-copy-wrapper">
+      <div class="copy-tooltip" id="copy-tooltip">Юз скопирован!</div>
+      <div class="bot-tag" id="bot-tag" onclick="copyBotUsername()" title="Нажмите, чтобы скопировать">@secure_message_bot</div>
+    </div>
+    <small>Это необходимо из-за правил безопасности Telegram: бот не сможет первым написать на ваш username, пока вы сами не активируете диалог с ним.</small>
+    <div class="modal-actions">
+      <button class="btn-danger" onclick="closeTgModal()">Выйти</button>
+      <button class="btn-primary" onclick="confirmTgAndDownload()">Да, я написал</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
