@@ -810,34 +810,7 @@ function downloadJSON(data, filename) {
   URL.revokeObjectURL(url);
 }
 
-  const isLocalLLM = document.getElementById('local-llm-checkbox').checked;
-  const maxId = nodes.length > 0 ? Math.max(...nodes.map(n => n.id)) : 0;
-
-  result.push({
-    id: maxId + 1,
-    parentid: [-1],
-    type: "llmtype",
-    info: {
-      type: isLocalLLM ? "local" : "cloud"
-    }
-  });
-
-  const jsonString = JSON.stringify(result, null, 2);
-  console.log("JSON для бэкенда:\n", jsonString);
-
-  const blob = new Blob([jsonString], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = "workflow_config.json";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-
-const BACKEND_URL = ''; // например: 'http://127.0.0.1:8000' — оставьте пустым, если проксируется
+const BACKEND_URL = 'http://127.0.0.1:8000'; // например: 'http://127.0.0.1:8000' — оставьте пустым, если проксируется
 
 let pollTimer = null;
 let currentSessionId = null;
@@ -914,6 +887,7 @@ async function pollScanStatus() {
       showScanProgress(`Ошибка: ${text}`, true);
       showError(text || 'Сканирование завершилось с ошибкой');
       // Можно добавить кнопку "Очистить" или сохранить сессию
+      console.log(data);
       return;
     }
 
